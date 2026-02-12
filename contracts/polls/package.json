@@ -1,0 +1,12 @@
+{
+  "name": "polls",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "cargo build -p polls --release --target wasm32-unknown-unknown",
+    "test": "cargo test -p polls",
+    "check": "cargo stylus check",
+    "deploy": "cargo stylus deploy --endpoint=\"${RPC_URL:-http://localhost:8547}\" --private-key=\"${PRIVATE_KEY:-0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659}\"",
+    "export-abi": "cargo stylus export-abi"
+  }
+}

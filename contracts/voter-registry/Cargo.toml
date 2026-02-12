@@ -1,0 +1,30 @@
+[package]
+name = "voter-registry"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+keywords = ["arbitrum", "ethereum", "stylus"]
+description = "Voter registry contract for onchain voting — manages voter registration and eligibility"
+
+[dependencies]
+alloy-primitives = "1.0.1"
+alloy-sol-types = "1.0.1"
+stylus-sdk = "0.10.0"
+
+[dev-dependencies]
+stylus-sdk = { version = "0.10.0", features = ["stylus-test"] }
+
+[features]
+default = ["mini-alloc"]
+export-abi = ["stylus-sdk/export-abi"]
+debug = ["stylus-sdk/debug"]
+mini-alloc = ["stylus-sdk/mini-alloc"]
+contract-client-gen = []
+
+[[bin]]
+name = "voter-registry-abi"
+path = "src/main.rs"
+
+[lib]
+crate-type = ["lib", "cdylib"]
+

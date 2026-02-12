@@ -1,0 +1,32 @@
+{
+  "name": "stylus-multi-contract-example",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm build:contracts && pnpm build:frontend",
+    "build:contracts": "cargo build --release --target wasm32-unknown-unknown --lib -p voter-registry && cargo build --release --target wasm32-unknown-unknown --lib -p polls",
+    "build:frontend": "pnpm --filter frontend build",
+    "test": "pnpm test:contracts && pnpm test:frontend",
+    "test:contracts": "cargo test && cargo test -p voter-registry --no-default-features --features stylus-sdk/stylus-test",
+    "test:frontend": "pnpm --filter frontend lint",
+    "deploy:voter-registry": "pnpm --filter voter-registry run deploy",
+    "deploy:polls": "pnpm --filter polls run deploy",
+    "deploy:all": "pnpm --filter scripts run deploy",
+    "check:voter-registry": "pnpm --filter voter-registry check",
+    "check:polls": "pnpm --filter polls check",
+    "check": "pnpm check:voter-registry && pnpm check:polls",
+    "export-abi": "pnpm --filter voter-registry export-abi && pnpm --filter polls export-abi",
+    "lint": "pnpm --filter frontend lint",
+    "devnode": "cd nitro-devnode && ./run-dev-node.sh",
+    "devnode:stylus": "cd nitro-devnode && ./run-dev-node.sh --stylus",
+    "fund": "pnpm --filter scripts fund",
+    "clean": "rm -rf target apps/frontend/.next"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1018"/>
+      <stop offset="50%" stop-color="#213147"/>
+      <stop offset="100%" stop-color="#0b1018"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#12AAFF"/>
+      <stop offset="50%" stop-color="#9DCCED"/>
+      <stop offset="100%" stop-color="#12AAFF"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#12AAFF" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#12AAFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="320" fill="url(#bg)"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.04" stroke="#12AAFF" stroke-width="0.5" fill="none">
+    <line x1="0" y1="80" x2="1280" y2="80"/>
+    <line x1="0" y1="160" x2="1280" y2="160"/>
+    <line x1="0" y1="240" x2="1280" y2="240"/>
+    <line x1="320" y1="0" x2="320" y2="320"/>
+    <line x1="640" y1="0" x2="640" y2="320"/>
+    <line x1="960" y1="0" x2="960" y2="320"/>
+  </g>
+
+  <!-- Top glow -->
+  <ellipse cx="640" cy="0" rx="500" ry="200" fill="url(#glow)"/>
+
+  <!-- Accent lines -->
+  <rect x="0" y="0" width="1280" height="2" fill="url(#accent)" opacity="0.6"/>
+  <rect x="0" y="318" width="1280" height="2" fill="url(#accent)" opacity="0.3"/>
+
+  <!-- Title -->
+  <text x="640" y="110" text-anchor="middle"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="44" font-weight="800" letter-spacing="-1.5" fill="#FFFFFF">
+    Stylus Multi-Contract Voting
+  </text>
+
+  <!-- Subtitle -->
+  <text x="640" y="160" text-anchor="middle"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="20" font-weight="400" fill="#9DCCED">
+    Type-safe cross-contract calls on Arbitrum with Stylus Rust SDK
+  </text>
+
+  <!-- Tech pills -->
+  <g transform="translate(640, 220)" text-anchor="middle"
+     font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace"
+     font-size="13" font-weight="500">
+
+    <!-- Rust -->
+    <rect x="-265" y="-16" width="60" height="30" rx="15"
+          fill="#12AAFF" fill-opacity="0.12" stroke="#12AAFF" stroke-opacity="0.25" stroke-width="1"/>
+    <text x="-235" y="5" fill="#12AAFF">Rust</text>
+
+    <!-- Stylus SDK -->
+    <rect x="-193" y="-16" width="100" height="30" rx="15"
+          fill="#12AAFF" fill-opacity="0.12" stroke="#12AAFF" stroke-opacity="0.25" stroke-width="1"/>
+    <text x="-143" y="5" fill="#12AAFF">Stylus SDK</text>
+
+    <!-- Arbitrum -->
+    <rect x="-81" y="-16" width="85" height="30" rx="15"
+          fill="#12AAFF" fill-opacity="0.12" stroke="#12AAFF" stroke-opacity="0.25" stroke-width="1"/>
+    <text x="-38" y="5" fill="#12AAFF">Arbitrum</text>
+
+    <!-- Next.js -->
+    <rect x="16" y="-16" width="75" height="30" rx="15"
+          fill="#12AAFF" fill-opacity="0.12" stroke="#12AAFF" stroke-opacity="0.25" stroke-width="1"/>
+    <text x="53" y="5" fill="#12AAFF">Next.js</text>
+
+    <!-- wagmi -->
+    <rect x="103" y="-16" width="65" height="30" rx="15"
+          fill="#12AAFF" fill-opacity="0.12" stroke="#12AAFF" stroke-opacity="0.25" stroke-width="1"/>
+    <text x="135" y="5" fill="#12AAFF">wagmi</text>
+
+    <!-- pnpm -->
+    <rect x="180" y="-16" width="60" height="30" rx="15"
+          fill="#12AAFF" fill-opacity="0.12" stroke="#12AAFF" stroke-opacity="0.25" stroke-width="1"/>
+    <text x="210" y="5" fill="#12AAFF">pnpm</text>
+  </g>
+</svg>

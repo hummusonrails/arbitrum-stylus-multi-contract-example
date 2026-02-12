@@ -1,0 +1,9 @@
+{
+  "name": "scripts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "fund": "bash ./funds.sh",
+    "deploy": "bash ./deploy.sh"
+  }
+}
