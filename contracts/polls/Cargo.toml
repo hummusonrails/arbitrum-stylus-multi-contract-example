@@ -7,13 +7,13 @@ keywords = ["arbitrum", "ethereum", "stylus"]
 description = "Polls contract for onchain voting — creates polls and tallies votes from registered voters"
 
 [dependencies]
-alloy-primitives = "1.0.1"
-alloy-sol-types = "1.0.1"
-stylus-sdk = "0.10.0"
+alloy-primitives = "1.5.7"
+alloy-sol-types = "1.5.7"
+stylus-sdk = "0.10.4"
 voter-registry = { path = "../voter-registry", version = "0.1.0", features = ["contract-client-gen"] }
 
 [dev-dependencies]
-stylus-sdk = { version = "0.10.0", features = ["stylus-test"] }
+stylus-sdk = { version = "0.10.4", features = ["stylus-test"] }
 voter-registry = { path = "../voter-registry", version = "0.1.0", features = ["contract-client-gen"] }
 
 [features]
