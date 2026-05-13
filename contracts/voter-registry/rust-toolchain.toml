@@ -1,3 +1,5 @@
 [toolchain]
-channel = "1.88.0"
+# Kept in sync with the workspace-root rust-toolchain.toml. cargo-stylus 0.10.5
+# (matching stylus-sdk 0.10.5 in Cargo.toml) requires rustc >= 1.91.0.
+channel = "1.91.0"
 targets = ["wasm32-unknown-unknown"]

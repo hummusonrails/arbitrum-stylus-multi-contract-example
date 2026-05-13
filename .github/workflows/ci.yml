@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+  CARGO_STYLUS_VERSION: 0.10.5
+
+jobs:
+  contracts:
+    name: contracts (build + check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin to the same channel as rust-toolchain.toml so we install exactly
+      # one toolchain (instead of "stable" first, then 1.91.0 again when
+      # rustup honors rust-toolchain.toml on the first cargo invocation).
+      # dtolnay/rust-toolchain publishes a tag per Rust version.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.91.0
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: stylus-ci
+
+      - name: Install cargo-stylus (${{ env.CARGO_STYLUS_VERSION }})
+        run: |
+          if ! command -v cargo-stylus >/dev/null 2>&1 \
+             || [ "$(cargo stylus --version | awk '{print $2}')" != "${CARGO_STYLUS_VERSION}" ]; then
+            cargo install --locked "cargo-stylus@${CARGO_STYLUS_VERSION}"
+          fi
+          cargo stylus --version
+
+      # Build each crate independently with -p — DO NOT build the workspace
+      # as a whole or Cargo feature unification turns voter-registry's cdylib
+      # into an 86-byte stub via contract-client-gen. See README.
+      - name: Build voter-registry
+        run: cargo build --release --target wasm32-unknown-unknown --lib -p voter-registry
+
+      - name: Build polls
+        run: cargo build --release --target wasm32-unknown-unknown --lib -p polls
+
+      - name: Verify WASM sizes look sane
+        run: |
+          for w in voter_registry.wasm polls.wasm; do
+            path="target/wasm32-unknown-unknown/release/$w"
+            test -f "$path" || { echo "missing $path"; exit 1; }
+            size=$(wc -c < "$path")
+            echo "$w: $size bytes"
+            test "$size" -gt 1000 || { echo "$w looks like a feature-unification stub"; exit 1; }
+          done
+
+      # NOTE: 'cargo stylus check' is intentionally NOT here. It performs
+      # activation simulation against a live RPC and would fail in this
+      # lightweight job (no devnode). The build above plus the WASM size
+      # guard are the meaningful static gates. Full activation is exercised
+      # in the e2e workflow via 'cargo stylus deploy' against a real
+      # nitro-devnode.
+
+      # The test mods are gated on the `stylus-test` feature of stylus-sdk
+      # (host-side test harness). Default `cargo test --workspace` compiles
+      # zero tests; we need to opt in per crate.
+      - name: cargo test (voter-registry)
+        run: cargo test -p voter-registry --no-default-features --features stylus-sdk/stylus-test
+
+      - name: cargo test (polls)
+        run: cargo test -p polls --no-default-features --features stylus-sdk/stylus-test
+
+  frontend:
+    name: frontend (build + lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Frontend build
+        run: pnpm --filter frontend build
+
+      - name: Frontend lint
+        run: pnpm --filter frontend lint
+
+  scripts:
+    name: scripts (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y shellcheck
+          shellcheck scripts/deploy.sh scripts/smoke.sh scripts/funds.sh

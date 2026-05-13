@@ -1,0 +1,185 @@
+name: E2E (devnode deploy + smoke)
+
+# Heavyweight: spins up nitro-devnode in Docker, deploys both contracts,
+# runs scripts/smoke.sh to exercise the full register → createPoll → vote flow.
+#
+# Runs on:
+#   - PRs that touch contracts, scripts, the deploy/devnode glue, or this workflow
+#   - manual dispatch
+#   - weekly schedule so the dep-update bot's PRs auto-validate
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/**'
+      - 'apps/frontend/**'
+      - 'scripts/**'
+      - 'nitro-devnode/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'Stylus.toml'
+      # Root pnpm metadata: 'pnpm install --frozen-lockfile' depends on the
+      # lockfile and workspace config, and this job calls 'pnpm run fund',
+      # 'pnpm run deploy:local', and 'pnpm run smoke' which are defined in
+      # the root package.json. Mirror the Cargo.toml/Cargo.lock pair.
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+  schedule:
+    # Tuesday 10:00 UTC — one hour after the dep-update bot runs Mondays.
+    - cron: '0 10 * * 2'
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+  CARGO_STYLUS_VERSION: 0.10.5
+  RPC_URL: http://localhost:8547
+  # PUBLIC test key only. This is the Offchain Labs nitro-devnode pre-funded
+  # deployer account (address 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E),
+  # documented in nitro-devnode/run-dev-node.sh and in the README. It only
+  # has funds on the ephemeral local devnode (chain id 412346) and exists
+  # in every Stylus dev environment in the world. Setting it as a workflow
+  # literal is intentional so this job runs without secret configuration.
+  #
+  # DO NOT copy this pattern for testnet/mainnet keys. GitHub only auto-
+  # redacts values sourced from `${{ secrets.* }}`; anything declared as a
+  # plain `env:` literal is echoed verbatim in every step header. For real
+  # keys, store them as repository secrets and reference them like:
+  #   PRIVATE_KEY: ${{ secrets.ARBITRUM_SEPOLIA_DEPLOYER_KEY }}
+  PRIVATE_KEY: '0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin to match rust-toolchain.toml (see ci.yml for rationale).
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.91.0
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: stylus-e2e
+
+      - name: Install cargo-stylus (${{ env.CARGO_STYLUS_VERSION }})
+        run: |
+          if ! command -v cargo-stylus >/dev/null 2>&1 \
+             || [ "$(cargo stylus --version | awk '{print $2}')" != "${CARGO_STYLUS_VERSION}" ]; then
+            cargo install --locked "cargo-stylus@${CARGO_STYLUS_VERSION}"
+          fi
+          cargo stylus --version
+
+      - name: Install Foundry (cast)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Start nitro-devnode in the background. The script itself docker-runs
+      # the node detached and then tails logs, so we background the script.
+      - name: Start nitro-devnode
+        run: |
+          ./nitro-devnode/run-dev-node.sh > devnode.log 2>&1 &
+          echo "DEVNODE_PID=$!" >> "$GITHUB_ENV"
+
+      # nitro-devnode prints "Nitro node is running..." at the very end of
+      # its bootstrap script. The marker is a necessary but NOT sufficient
+      # readiness signal: the JSON-RPC server keeps the long-lived sockets
+      # used during bootstrap (chain-owner setup, CREATE2 factory, Cache
+      # Manager, StylusDeployer) for a brief moment after the marker prints,
+      # and the next short-lived cast/curl connection can race their close
+      # and hit ECONNRESET. Read-only chain id probes pass through that
+      # window, but write traffic ('cast send') does not.
+      #
+      # The honest readiness probe is therefore an actual no-op cast send
+      # against the deployer self-address. Once that succeeds, the chain is
+      # truly accepting writes and the subsequent pnpm fund/deploy steps
+      # are race-free.
+      - name: Wait for devnode bootstrap to finish
+        run: |
+          for _ in $(seq 1 120); do
+            # Fail fast if the backgrounded devnode shell has already exited
+            # (docker container crashed, docker pull failed, etc). Avoids
+            # waiting the full timeout for an obviously-dead node.
+            if [ -n "${DEVNODE_PID:-}" ] && ! kill -0 "$DEVNODE_PID" 2>/dev/null; then
+              echo "::error::devnode process (pid $DEVNODE_PID) exited before bootstrap completed"
+              tail -200 devnode.log || true
+              exit 1
+            fi
+            if grep -q "Nitro node is running" devnode.log 2>/dev/null; then
+              echo "bootstrap marker present; probing chain for write readiness..."
+              # Need Foundry on PATH for cast wallet / cast send. The action
+              # earlier in the job already installed it.
+              DEPLOYER=$(cast wallet address "$PRIVATE_KEY")
+              for _ in $(seq 1 30); do
+                if cast send "$DEPLOYER" --value 0 \
+                    --private-key "$PRIVATE_KEY" --rpc-url "$RPC_URL" \
+                    >/dev/null 2>&1; then
+                  echo "chain accepts writes — ready"
+                  exit 0
+                fi
+                sleep 1
+              done
+              echo "::error::bootstrap marker present but chain rejected writes for 30s"
+              tail -200 devnode.log || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::devnode did not finish bootstrap within 240s"
+          tail -200 devnode.log || true
+          exit 1
+
+      # 'pnpm fund' (without 'run') would prefer pnpm's built-in funding
+      # command if one ever shadows our script; 'pnpm run fund' is the
+      # unambiguous form.
+      - name: Fund test accounts
+        run: pnpm run fund
+
+      - name: Deploy contracts
+        run: pnpm run deploy:local
+
+      - name: Smoke test
+        run: pnpm run smoke
+
+      - name: Deploy contracts
+        run: pnpm deploy:local
+
+      - name: Smoke test
+        run: pnpm smoke
+
+      - name: Tear down devnode
+        if: always()
+        run: |
+          docker stop nitro-dev || true
+          if [ -n "${DEVNODE_PID:-}" ]; then kill "$DEVNODE_PID" 2>/dev/null || true; fi
+
+      - name: Upload devnode logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devnode-log
+          path: devnode.log
+          if-no-files-found: ignore

@@ -18,6 +18,7 @@ export function CreatePoll({ onCreated }: { onCreated?: () => void }) {
   useEffect(() => {
     if (isSuccess) {
       refetchCount();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset the form input after the createPoll tx is mined. Clearing on click submit would lose the user's input if the tx is rejected in the wallet.
       setTitle("");
       onCreated?.();
     }
