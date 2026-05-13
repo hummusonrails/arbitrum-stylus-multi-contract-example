@@ -84,19 +84,28 @@ jobs:
           ./nitro-devnode/run-dev-node.sh > devnode.log 2>&1 &
           echo "DEVNODE_PID=$!" >> "$GITHUB_ENV"
 
-      - name: Wait for RPC
+      # The devnode script prints "Nitro node is running..." at the very end
+      # of its bootstrap (after CREATE2 factory, Cache Manager, and
+      # StylusDeployer are all in place). RPC starts responding much earlier
+      # while those setup transactions are still in flight, so waiting only
+      # for eth_chainId is racy — 'cast send' against a half-bootstrapped
+      # node sees ConnectionReset.
+      - name: Wait for devnode bootstrap to finish
         run: |
-          for _ in $(seq 1 60); do
-            if curl -fsS -X POST -H 'Content-Type: application/json' \
-              --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
-              "$RPC_URL" | grep -q '0x64aba'; then
-              echo "devnode is up (chain id 412346)"
+          for _ in $(seq 1 120); do
+            if grep -q "Nitro node is running" devnode.log 2>/dev/null; then
+              echo "devnode bootstrap complete"
+              # belt-and-suspenders: confirm RPC chain id matches.
+              curl -fsS -X POST -H 'Content-Type: application/json' \
+                --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+                "$RPC_URL" | grep -q '0x64aba' \
+                || { echo "::error::bootstrap marker present but chain id mismatch"; exit 1; }
               exit 0
             fi
             sleep 2
           done
-          echo "::error::devnode did not come up within 120s"
-          tail -100 devnode.log || true
+          echo "::error::devnode did not finish bootstrap within 240s"
+          tail -200 devnode.log || true
           exit 1
 
       - name: Fund test accounts

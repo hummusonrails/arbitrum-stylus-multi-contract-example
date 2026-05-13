@@ -61,13 +61,12 @@ jobs:
             test "$size" -gt 1000 || { echo "$w looks like a feature-unification stub"; exit 1; }
           done
 
-      - name: cargo stylus check (voter-registry)
-        working-directory: contracts/voter-registry
-        run: cargo stylus check --wasm-file ../../target/wasm32-unknown-unknown/release/voter_registry.wasm
-
-      - name: cargo stylus check (polls)
-        working-directory: contracts/polls
-        run: cargo stylus check --wasm-file ../../target/wasm32-unknown-unknown/release/polls.wasm
+      # NOTE: 'cargo stylus check' is intentionally NOT here. It performs
+      # activation simulation against a live RPC and would fail in this
+      # lightweight job (no devnode). The build above plus the WASM size
+      # guard are the meaningful static gates. Full activation is exercised
+      # in the e2e workflow via 'cargo stylus deploy' against a real
+      # nitro-devnode.
 
       # The test mods are gated on the `stylus-test` feature of stylus-sdk
       # (host-side test harness). Default `cargo test --workspace` compiles
