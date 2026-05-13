@@ -34,6 +34,18 @@ env:
   RUST_BACKTRACE: short
   CARGO_STYLUS_VERSION: 0.10.5
   RPC_URL: http://localhost:8547
+  # PUBLIC test key only. This is the Offchain Labs nitro-devnode pre-funded
+  # deployer account (address 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E),
+  # documented in nitro-devnode/run-dev-node.sh and in the README. It only
+  # has funds on the ephemeral local devnode (chain id 412346) and exists
+  # in every Stylus dev environment in the world. Setting it as a workflow
+  # literal is intentional so this job runs without secret configuration.
+  #
+  # DO NOT copy this pattern for testnet/mainnet keys. GitHub only auto-
+  # redacts values sourced from `${{ secrets.* }}`; anything declared as a
+  # plain `env:` literal is echoed verbatim in every step header. For real
+  # keys, store them as repository secrets and reference them like:
+  #   PRIVATE_KEY: ${{ secrets.ARBITRUM_SEPOLIA_DEPLOYER_KEY }}
   PRIVATE_KEY: '0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659'
 
 jobs:
