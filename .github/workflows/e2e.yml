@@ -55,8 +55,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin to match rust-toolchain.toml (see ci.yml for rationale).
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.91.0
         with:
           targets: wasm32-unknown-unknown
 
@@ -105,6 +106,14 @@ jobs:
       - name: Wait for devnode bootstrap to finish
         run: |
           for _ in $(seq 1 120); do
+            # Fail fast if the backgrounded devnode shell has already exited
+            # (docker container crashed, docker pull failed, etc). Avoids
+            # waiting the full timeout for an obviously-dead node.
+            if [ -n "${DEVNODE_PID:-}" ] && ! kill -0 "$DEVNODE_PID" 2>/dev/null; then
+              echo "::error::devnode process (pid $DEVNODE_PID) exited before bootstrap completed"
+              tail -200 devnode.log || true
+              exit 1
+            fi
             if grep -q "Nitro node is running" devnode.log 2>/dev/null; then
               echo "devnode bootstrap complete"
               # belt-and-suspenders: confirm RPC chain id matches.
@@ -120,8 +129,17 @@ jobs:
           tail -200 devnode.log || true
           exit 1
 
+      # 'pnpm fund' (without 'run') would prefer pnpm's built-in funding
+      # command if one ever shadows our script; 'pnpm run fund' is the
+      # unambiguous form.
       - name: Fund test accounts
-        run: pnpm fund
+        run: pnpm run fund
+
+      - name: Deploy contracts
+        run: pnpm run deploy:local
+
+      - name: Smoke test
+        run: pnpm run smoke
 
       - name: Deploy contracts
         run: pnpm deploy:local

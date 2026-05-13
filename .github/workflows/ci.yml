@@ -22,10 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # rust-toolchain.toml pins the channel; this action just installs it
-      # and the wasm32 target declared there.
+      # Pin to the same channel as rust-toolchain.toml so we install exactly
+      # one toolchain (instead of "stable" first, then 1.91.0 again when
+      # rustup honors rust-toolchain.toml on the first cargo invocation).
+      # dtolnay/rust-toolchain publishes a tag per Rust version.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.91.0
         with:
           targets: wasm32-unknown-unknown
 

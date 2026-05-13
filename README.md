@@ -30,7 +30,7 @@
 ```bash
 pnpm install        # install all workspace dependencies
 pnpm devnode        # start local Arbitrum devnode (requires Docker)
-pnpm fund           # fund test accounts with 1 ETH each
+pnpm run fund       # fund test accounts with 1 ETH each
 pnpm deploy:all     # deploy both contracts
 pnpm dev            # start frontend on :3000
 ```
@@ -83,8 +83,11 @@ pnpm devnode:stylus
 ### 2. Fund test accounts
 
 ```bash
-pnpm fund
+pnpm run fund
 ```
+
+> [!NOTE]
+> Use `pnpm run fund`, not `pnpm fund` — `fund` shadows a built-in pnpm command (`pnpm fund` displays package funding info). Today pnpm 10 prefers the workspace script, but the explicit `run` form is unambiguous and won't break if pnpm changes precedence.
 
 ### 3. Add the network to MetaMask
 
@@ -125,7 +128,7 @@ Import any into MetaMask to interact with the dApp locally.
 
 ```bash
 pnpm devnode                          # terminal 1: start devnode
-pnpm fund                             # terminal 2: fund test accounts
+pnpm run fund                         # terminal 2: fund test accounts
 pnpm deploy:local                     # deploy, link, write .env.local, export ABIs
 pnpm smoke                            # optional: assert the full flow works
 pnpm dev                              # start frontend
