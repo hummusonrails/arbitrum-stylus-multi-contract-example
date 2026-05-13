@@ -5,6 +5,12 @@ members = [
 ]
 resolver = "2"
 
+# NOTE: do not build the workspace as a whole with
+# `cargo build --target wasm32-unknown-unknown --lib`. Build each contract
+# crate independently with `-p` (see scripts/deploy.sh and the README).
+# A whole-workspace build unifies features and turns voter-registry's cdylib
+# into an 86-byte stub via the `contract-client-gen` feature.
+
 [profile.release]
 codegen-units = 1
 strip = true

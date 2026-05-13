@@ -4,8 +4,9 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
-  <img src="https://img.shields.io/badge/rust-1.88.0-F74C00?style=flat-square&logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/stylus--sdk-0.10.0-12AAFF?style=flat-square" alt="Stylus SDK">
+  <img src="https://img.shields.io/badge/rust-1.91.0-F74C00?style=flat-square&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/stylus--sdk-0.10.5-12AAFF?style=flat-square" alt="Stylus SDK">
+  <img src="https://img.shields.io/badge/cargo--stylus-0.10.5-12AAFF?style=flat-square" alt="cargo-stylus">
   <img src="https://img.shields.io/badge/next.js-16-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js">
   <a href="https://github.com/hummusonrails/stylus-multi-contract-example/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome"></a>
 </p>
@@ -48,8 +49,12 @@ pnpm dev            # start frontend on :3000
 <details>
 <summary><strong>Prerequisites</strong></summary>
 
-- [Rust](https://rustup.rs/) (stable 1.88.0 — pinned in `rust-toolchain.toml`)
-- [cargo-stylus](https://github.com/OffchainLabs/cargo-stylus) for deploying to Arbitrum
+- [Rust](https://rustup.rs/) `1.91.0` — pinned in `rust-toolchain.toml` (required by `cargo-stylus` 0.10.5)
+- [cargo-stylus](https://github.com/OffchainLabs/cargo-stylus) `0.10.5` for deploying to Arbitrum:
+  ```bash
+  cargo install --locked cargo-stylus@0.10.5
+  ```
+  Keep the CLI version in lockstep with the `stylus-sdk` version in `contracts/*/Cargo.toml`. The deploy script will refuse to run with a mismatched CLI.
 - [pnpm](https://pnpm.io/) 10+
 - [Node.js](https://nodejs.org/) 18+
 - [Docker](https://docs.docker.com/get-docker/) for the local Nitro devnode
@@ -121,9 +126,12 @@ Import any into MetaMask to interact with the dApp locally.
 ```bash
 pnpm devnode                          # terminal 1: start devnode
 pnpm fund                             # terminal 2: fund test accounts
-pnpm deploy:all                       # deploy, link, write .env.local, export ABIs
+pnpm deploy:local                     # deploy, link, write .env.local, export ABIs
+pnpm smoke                            # optional: assert the full flow works
 pnpm dev                              # start frontend
 ```
+
+Add `pnpm deploy:local:cache` instead of `deploy:local` to place 0-wei cache bids for each contract immediately after activation — cheaper subsequent calls in ArbOS.
 
 ## Usage
 
@@ -131,16 +139,36 @@ pnpm dev                              # start frontend
 
 ```bash
 pnpm build              # contracts + frontend
-pnpm build:contracts    # cargo build --release --target wasm32-unknown-unknown
+pnpm build:contracts    # builds each crate independently with -p
 pnpm build:frontend     # next build
 ```
+
+> [!IMPORTANT]
+> **Always build each contract crate independently with `-p`.** This workspace contains inter-contract dependencies via `contract-client-gen` (the `polls` crate consumes `voter-registry`). Running `cargo build --release --target wasm32-unknown-unknown --lib` against the workspace as a whole triggers Cargo's feature unification, which enables `contract-client-gen` on `voter-registry`'s cdylib output and produces an **86-byte stub** instead of the real contract — your deploy will succeed and your reads will silently revert.
+>
+> The fix is the same pattern `scripts/deploy.sh` and `pnpm build:contracts` already use:
+>
+> ```bash
+> cargo build --release --target wasm32-unknown-unknown --lib -p voter-registry
+> cargo build --release --target wasm32-unknown-unknown --lib -p polls
+> ```
+>
+> Building `polls` after `voter-registry` recompiles `voter-registry` as an rlib dependency (with `contract-client-gen` on) but does **not** overwrite the cdylib produced by the first command.
 
 ### Test
 
 ```bash
 pnpm test               # all contract tests + frontend lint
-pnpm test:contracts     # cargo test
+pnpm test:contracts     # cargo test for each crate with stylus-test feature
 pnpm test:frontend      # eslint
+```
+
+Contract tests live in the `#[cfg(test)]` modules of each crate's `lib.rs` and use `stylus-sdk`'s host-side `TestVM`. They require the `stylus-test` feature, so plain `cargo test` against the workspace compiles zero tests. The `pnpm test:contracts` script enables the feature per crate.
+
+After deploying locally, a full end-to-end on-chain assertion is one command away:
+
+```bash
+pnpm smoke              # register → createPoll → vote → getResults, with assertions
 ```
 
 Target a single contract:
@@ -319,13 +347,17 @@ let is_registered: bool = registry
 | `test:frontend` | ESLint |
 | `deploy:voter-registry` | Deploy voter-registry via cargo stylus |
 | `deploy:polls` | Deploy polls via cargo stylus |
-| `deploy:all` | Deploy both, link, write `.env.local`, export ABIs |
+| `deploy:all` | Deploy both, link, write `.env.local`, export ABIs (via the `scripts` workspace package) |
+| `deploy:local` | Same as `deploy:all` but calls `scripts/deploy.sh` directly (handy in CI) |
+| `deploy:local:cache` | `deploy:local` plus a 0-wei `cargo stylus cache bid` for each contract |
+| `smoke` | Run `scripts/smoke.sh` — full register → createPoll → vote → getResults flow against `.env.local` addresses |
 | `check:voter-registry` | Stylus check voter-registry |
 | `check:polls` | Stylus check polls |
 | `check` | Check both |
 | `export-abi` | Export ABIs for both contracts |
 | `devnode` | Start local Nitro devnode via Docker |
 | `devnode:stylus` | Start devnode with Rust + Foundry pre-installed |
+| `devnode:stop` | `docker stop nitro-dev` (no-op if not running) |
 | `fund` | Fund 10 test accounts with 1 ETH each |
 | `lint` | Frontend lint |
 | `clean` | Remove `target/` and `.next/` |

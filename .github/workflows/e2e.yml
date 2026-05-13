@@ -1,0 +1,123 @@
+name: E2E (devnode deploy + smoke)
+
+# Heavyweight: spins up nitro-devnode in Docker, deploys both contracts,
+# runs scripts/smoke.sh to exercise the full register → createPoll → vote flow.
+#
+# Runs on:
+#   - PRs that touch contracts, scripts, the deploy/devnode glue, or this workflow
+#   - manual dispatch
+#   - weekly schedule so the dep-update bot's PRs auto-validate
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/**'
+      - 'apps/frontend/**'
+      - 'scripts/**'
+      - 'nitro-devnode/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'Stylus.toml'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+  schedule:
+    # Tuesday 10:00 UTC — one hour after the dep-update bot runs Mondays.
+    - cron: '0 10 * * 2'
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+  CARGO_STYLUS_VERSION: 0.10.5
+  RPC_URL: http://localhost:8547
+  PRIVATE_KEY: '0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: stylus-e2e
+
+      - name: Install cargo-stylus (${{ env.CARGO_STYLUS_VERSION }})
+        run: |
+          if ! command -v cargo-stylus >/dev/null 2>&1 \
+             || [ "$(cargo stylus --version | awk '{print $2}')" != "${CARGO_STYLUS_VERSION}" ]; then
+            cargo install --locked "cargo-stylus@${CARGO_STYLUS_VERSION}"
+          fi
+          cargo stylus --version
+
+      - name: Install Foundry (cast)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Start nitro-devnode in the background. The script itself docker-runs
+      # the node detached and then tails logs, so we background the script.
+      - name: Start nitro-devnode
+        run: |
+          ./nitro-devnode/run-dev-node.sh > devnode.log 2>&1 &
+          echo "DEVNODE_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for RPC
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS -X POST -H 'Content-Type: application/json' \
+              --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+              "$RPC_URL" | grep -q '0x64aba'; then
+              echo "devnode is up (chain id 412346)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::devnode did not come up within 120s"
+          tail -100 devnode.log || true
+          exit 1
+
+      - name: Fund test accounts
+        run: pnpm fund
+
+      - name: Deploy contracts
+        run: pnpm deploy:local
+
+      - name: Smoke test
+        run: pnpm smoke
+
+      - name: Tear down devnode
+        if: always()
+        run: |
+          docker stop nitro-dev || true
+          if [ -n "${DEVNODE_PID:-}" ]; then kill "$DEVNODE_PID" 2>/dev/null || true; fi
+
+      - name: Upload devnode logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devnode-log
+          path: devnode.log
+          if-no-files-found: ignore
