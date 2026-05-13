@@ -97,12 +97,19 @@ jobs:
           ./nitro-devnode/run-dev-node.sh > devnode.log 2>&1 &
           echo "DEVNODE_PID=$!" >> "$GITHUB_ENV"
 
-      # The devnode script prints "Nitro node is running..." at the very end
-      # of its bootstrap (after CREATE2 factory, Cache Manager, and
-      # StylusDeployer are all in place). RPC starts responding much earlier
-      # while those setup transactions are still in flight, so waiting only
-      # for eth_chainId is racy — 'cast send' against a half-bootstrapped
-      # node sees ConnectionReset.
+      # nitro-devnode prints "Nitro node is running..." at the very end of
+      # its bootstrap script. The marker is a necessary but NOT sufficient
+      # readiness signal: the JSON-RPC server keeps the long-lived sockets
+      # used during bootstrap (chain-owner setup, CREATE2 factory, Cache
+      # Manager, StylusDeployer) for a brief moment after the marker prints,
+      # and the next short-lived cast/curl connection can race their close
+      # and hit ECONNRESET. Read-only chain id probes pass through that
+      # window, but write traffic ('cast send') does not.
+      #
+      # The honest readiness probe is therefore an actual no-op cast send
+      # against the deployer self-address. Once that succeeds, the chain is
+      # truly accepting writes and the subsequent pnpm fund/deploy steps
+      # are race-free.
       - name: Wait for devnode bootstrap to finish
         run: |
           for _ in $(seq 1 120); do
@@ -115,13 +122,22 @@ jobs:
               exit 1
             fi
             if grep -q "Nitro node is running" devnode.log 2>/dev/null; then
-              echo "devnode bootstrap complete"
-              # belt-and-suspenders: confirm RPC chain id matches.
-              curl -fsS -X POST -H 'Content-Type: application/json' \
-                --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
-                "$RPC_URL" | grep -q '0x64aba' \
-                || { echo "::error::bootstrap marker present but chain id mismatch"; exit 1; }
-              exit 0
+              echo "bootstrap marker present; probing chain for write readiness..."
+              # Need Foundry on PATH for cast wallet / cast send. The action
+              # earlier in the job already installed it.
+              DEPLOYER=$(cast wallet address "$PRIVATE_KEY")
+              for _ in $(seq 1 30); do
+                if cast send "$DEPLOYER" --value 0 \
+                    --private-key "$PRIVATE_KEY" --rpc-url "$RPC_URL" \
+                    >/dev/null 2>&1; then
+                  echo "chain accepts writes — ready"
+                  exit 0
+                fi
+                sleep 1
+              done
+              echo "::error::bootstrap marker present but chain rejected writes for 30s"
+              tail -200 devnode.log || true
+              exit 1
             fi
             sleep 2
           done
