@@ -19,6 +19,13 @@ on:
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
       - 'Stylus.toml'
+      # Root pnpm metadata: 'pnpm install --frozen-lockfile' depends on the
+      # lockfile and workspace config, and this job calls 'pnpm run fund',
+      # 'pnpm run deploy:local', and 'pnpm run smoke' which are defined in
+      # the root package.json. Mirror the Cargo.toml/Cargo.lock pair.
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/e2e.yml'
   workflow_dispatch:
   schedule:
